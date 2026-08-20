@@ -104,3 +104,8 @@
 - **Why**: Ensure every tool execution leaves a persistent written record on disk.
 - **Verification**: Tested `assess_posts()` and `get_weakest_posts()`, generated `reports/get_weakest_posts.md` and `reports/assess_posts.md`.
 
+### 2026-08-20 22:06 - Updated System Instruction to 50-Word Conversational Digest
+- **What was built/changed**: Updated agent system instruction in `app/agent.py` requiring all chat responses after tool calls to be a max 50-word conversational summary digest (counts, standouts, and one suggested next action).
+- **Why**: Provide human-skimmable chat responses while preserving complete details in `reports/*.md`.
+
+

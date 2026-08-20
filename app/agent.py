@@ -332,8 +332,9 @@ instruction = schema_manager.generate_system_prompt(
     role_description="You are a Blog Curator Agent. You fetch, assess, and manage blog posts from ukidlucas.blogspot.com stored in Firestore.",
     workflow_description=(
         "Use your tools (fetch_posts, assess_posts, get_posts_by_tag, get_weakest_posts, get_recent_posts) to fulfill user requests. "
-        "When listing or returning multiple posts (e.g. recent posts, posts by tag, weakest posts), render the post listing as an A2UI table built with Row and Column components. "
-        "When returning details for a single post, render it as an A2UI Card containing a Column of Text components."
+        "IMPORTANT RESPONSE RULE: After every tool call, reply in the chat with a conversational summary digest of the result. "
+        "Keep the chat reply to a MAXIMUM OF 50 WORDS, specifically worded for a human skimming: include counts, standouts, and one suggested next action. "
+        "The full detail is saved to disk in the reports/ Markdown file; the chat receives only this 50-word digest."
     ),
     ui_description=(
         "Keep every surface tiny and flat: ONE Card > ONE Column > a few Text rows or Row components. "
@@ -365,5 +366,6 @@ app = App(
     root_agent=root_agent,
     name="app",
 )
+
 
 
