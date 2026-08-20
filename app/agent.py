@@ -334,6 +334,69 @@ def get_recent_posts(limit: int = 10) -> str:
     return json.dumps(results, indent=2)
 
 
+def summarize_posts() -> str:
+    """Queries Firestore collection 'posts' and generates a comprehensive summary of all assessed posts.
+    Writes a report to reports/summarize_posts.md.
+
+    Returns:
+        JSON string containing collection metrics, content breakdown, and top tags.
+    """
+    db = firestore.Client(project=PROJECT_ID)
+    docs = [d.to_dict() for d in db.collection("posts").stream()]
+
+    total_count = len(docs)
+    weak_count = sum(1 for d in docs if d.get("content_strength") == "weak")
+    strong_count = sum(1 for d in docs if d.get("content_strength") == "strong")
+    average_count = sum(1 for d in docs if d.get("content_strength") == "average")
+    missing_tags_count = sum(1 for d in docs if d.get("missing_tags") is True)
+    avg_score = round(sum(d.get("score", 0) for d in docs) / total_count, 2) if total_count > 0 else 0
+
+    all_tags = []
+    for d in docs:
+        all_tags.extend(d.get("tags", []))
+    tag_counts = {}
+    for t in all_tags:
+        tag_counts[t] = tag_counts.get(t, 0) + 1
+    top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+
+    summary_data = {
+        "total_posts": total_count,
+        "average_score": avg_score,
+        "content_strength_breakdown": {
+            "strong": strong_count,
+            "average": average_count,
+            "weak": weak_count,
+        },
+        "posts_missing_tags": missing_tags_count,
+        "top_tags": dict(top_tags[:5]),
+    }
+
+    tag_list_str = ", ".join([f"{k} ({v})" for k, v in top_tags[:5]]) if top_tags else "None"
+    report_md = f"""## Collection Summary ({total_count} total posts)
+
+### Key Metrics
+- **Total Assessed Posts**: {total_count}
+- **Average Quality Score**: {avg_score} / 5.0
+- **Strong Posts**: {strong_count}
+- **Average Posts**: {average_count}
+- **Weak Posts**: {weak_count}
+- **Posts Missing Topic Tags**: {missing_tags_count}
+- **Top Tags**: {tag_list_str}
+
+### Post Breakdown
+
+| Title | Published Date | Score | Content Strength | Missing Tags | Top Tags |
+|---|---|---|---|---|---|
+"""
+    for d in docs:
+        tags_str = ", ".join(d.get("tags", [])) or "None"
+        report_md += f"| {d.get('title')} | {d.get('published_date')} | {d.get('score')} | {d.get('content_strength')} | {d.get('missing_tags')} | {tags_str} |\n"
+
+    _write_tool_report("summarize_posts", {}, report_md)
+
+    return json.dumps(summary_data, indent=2)
+
+
 schema_manager = A2uiSchemaManager(
     version="0.8",
     catalogs=[BasicCatalog.get_config("0.8")],
@@ -342,7 +405,7 @@ schema_manager = A2uiSchemaManager(
 instruction = schema_manager.generate_system_prompt(
     role_description="You are a Blog Curator Agent. You fetch, assess, and manage blog posts from ukidlucas.blogspot.com stored in Firestore.",
     workflow_description=(
-        "Use your tools (fetch_posts, assess_posts, get_posts_by_tag, get_posts_by_score, get_recent_posts) to fulfill user requests. "
+        "Use your tools (fetch_posts, assess_posts, get_posts_by_tag, get_posts_by_score, get_recent_posts, summarize_posts) to fulfill user requests. "
         "IMPORTANT CHAT RESPONSE RULE: After every tool call, ALWAYS reply in the chat with a conversational summary digest of the result. "
         "Keep the chat text digest to a MAXIMUM OF 50 WORDS, specifically formatted for a human skimming: include key counts, standouts, and one suggested next action. "
         "The full detailed table or list is automatically written to disk in the reports/ Markdown file; the chat gets only this 50-word digest."
@@ -369,7 +432,7 @@ root_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=instruction,
-    tools=[fetch_posts, assess_posts, get_posts_by_tag, get_posts_by_score, get_recent_posts],
+    tools=[fetch_posts, assess_posts, get_posts_by_tag, get_posts_by_score, get_recent_posts, summarize_posts],
     after_model_callback=a2ui_callback,
 )
 
@@ -377,6 +440,7 @@ app = App(
     root_agent=root_agent,
     name="app",
 )
+
 
 
 

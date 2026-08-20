@@ -12,6 +12,7 @@
   - `get_posts_by_tag(tag)`: Queries Firestore `posts` collection by tag (`array_contains` filter).
   - `get_posts_by_score(order="best"|"worst", limit=10)`: Queries Firestore `posts` collection sorted by score (best or worst). Replaces separate weakest posts tool.
   - `get_recent_posts(limit=10)`: Queries Firestore `posts` collection ordered by `published_date` descending.
+  - `summarize_posts()`: Queries Firestore `posts` collection and generates collection metrics, strength breakdown, and top tags report in `reports/summarize_posts.md`.
 - **Data Schema (`posts` Firestore Collection)**:
   - `id` (string): post filename stem (e.g., `2026-08-11-overnight-pizza-sourdough-12-inch`)
   - `title` (string): post title
@@ -114,6 +115,12 @@
   - Updated `a2ui_callback` in `app/a2ui_utils.py` to extract and preserve non-A2UI prose parts alongside A2UI blob payloads so the 50-word chat summary digest renders cleanly without producing blank responses.
 - **Why**: Unified scoring queries into a single parameterized tool and fixed A2UI callback stripping text prose from model outputs.
 - **Verification**: Executed `get_posts_by_score` for both `"best"` and `"worst"` orders, verified `reports/get_posts_by_score.md`.
+
+### 2026-08-20 22:22 - Added summarize_posts Tool & Generated Report
+- **What was built/changed**: Added `summarize_posts()` tool in `app/agent.py` and registered it in `root_agent`. Executed tool to generate `reports/summarize_posts.md`.
+- **Why**: Provide collection-wide metrics, quality score averages, strength breakdown, and top tags.
+- **Verification**: Executed `summarize_posts()` and verified `reports/summarize_posts.md`.
+
 
 
 
