@@ -98,3 +98,9 @@
 ### 2026-08-20 21:40 - Permanent MEMORY.md Tracking System
 - **What was built/changed**: Formalized `MEMORY.md` into `# Current State` and `# Log` sections with timestamp rules and gotcha records.
 - **Why**: Maintain a permanent, complete record across agent sessions.
+
+### 2026-08-20 22:03 - Added Automated Tool Report Generation & Tested
+- **What was built/changed**: Updated all tools (`fetch_posts`, `assess_posts`, `get_posts_by_tag`, `get_weakest_posts`, `get_recent_posts`) in `app/agent.py` to write Markdown report files to `reports/<tool_name>.md` with system clock timestamp, parameters, and Markdown results tables.
+- **Why**: Ensure every tool execution leaves a persistent written record on disk.
+- **Verification**: Tested `assess_posts()` and `get_weakest_posts()`, generated `reports/get_weakest_posts.md` and `reports/assess_posts.md`.
+

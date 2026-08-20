@@ -1,4 +1,5 @@
 # ruff: noqa
+import datetime
 import glob
 import html
 import json
@@ -21,10 +22,29 @@ MODEL = "gemini-2.5-flash"
 PROJECT_ID = "qwiklabs-gcp-03-001b5a0cda08"
 
 
+def _write_tool_report(tool_name: str, params: dict, content_markdown: str) -> None:
+    """Helper to write a Markdown report file in reports/<tool_name>.md."""
+    os.makedirs("reports", exist_ok=True)
+    filepath = f"reports/{tool_name}.md"
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    param_str = ", ".join(f"{k}={repr(v)}" for k, v in params.items()) if params else "none"
+
+    report_text = f"""# Report: {tool_name}
+
+**Timestamp**: {now_str}  
+**Parameters**: {param_str}  
+
+{content_markdown}
+"""
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(report_text)
+
+
 def fetch_posts() -> str:
     """Fetches up to 10 recent posts from ukidlucas.blogspot.com (Atom XML feed),
     parses title, date, URL, tags, plain text content, and writes each new post
-    to posts/YYYY-MM-DD-slug.md. Skips files that already exist.
+    to posts/YYYY-MM-DD-slug.md. Skips files that already exist. Also writes a report
+    to reports/fetch_posts.md.
 
     Returns:
         A message describing newly created markdown post files.
@@ -40,6 +60,7 @@ def fetch_posts() -> str:
 
     os.makedirs("posts", exist_ok=True)
     new_files = []
+    fetched_records = []
 
     for entry in entries:
         title = entry.findtext("atom:title", default="Untitled", namespaces=ns).strip()
@@ -60,18 +81,16 @@ def fetch_posts() -> str:
         content_text = re.sub(r"<[^>]+>", "", content_html)
         content_text = html.unescape(content_text).strip()
 
-        # Slugify title
         slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
         if not slug:
             slug = "post"
 
         filename = f"posts/{published}-{slug}.md"
+        is_new = not os.path.exists(filename)
 
-        if os.path.exists(filename):
-            continue
-
-        tags_str = ", ".join(categories)
-        markdown_content = f"""---
+        if is_new:
+            tags_str = ", ".join(categories)
+            markdown_content = f"""---
 title: {title}
 published_date: {published}
 url: {post_url}
@@ -80,9 +99,25 @@ tags: [{tags_str}]
 
 {content_text}
 """
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(markdown_content)
-        new_files.append(filename)
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(markdown_content)
+            new_files.append(filename)
+
+        fetched_records.append({
+            "title": title,
+            "published": published,
+            "url": post_url,
+            "file": filename,
+            "status": "Created" if is_new else "Existing (Skipped)",
+        })
+
+    # Generate Markdown report table
+    report_rows = ["| Published Date | Title | Status | Saved File | URL |", "|---|---|---|---|---|"]
+    for r in fetched_records:
+        report_rows.append(f"| {r['published']} | {r['title']} | {r['status']} | `{r['file']}` | [{r['url']}]({r['url']}) |")
+
+    report_md = "## Fetched Feed Entries\n\n" + "\n".join(report_rows)
+    _write_tool_report("fetch_posts", {}, report_md)
 
     if not new_files:
         return "No new posts to fetch; all posts already exist in posts/."
@@ -92,7 +127,7 @@ tags: [{tags_str}]
 def assess_posts() -> str:
     """Reads post markdown files from posts/, assesses each post for topic tags,
     grammar issues, content strength, word count, and score, then stores one document
-    per post in the Firestore collection 'posts'.
+    per post in the Firestore collection 'posts'. Writes a report to reports/assess_posts.md.
 
     Returns:
         A message summarizing the assessment results and Firestore saves.
@@ -100,9 +135,10 @@ def assess_posts() -> str:
     db = firestore.Client(project=PROJECT_ID)
     files = glob.glob("posts/*.md")
     if not files:
+        _write_tool_report("assess_posts", {}, "No markdown files found in `posts/`.")
         return "No markdown files found in posts/. Call fetch_posts first."
 
-    assessed_count = 0
+    assessed_records = []
 
     for filepath in files:
         filename = os.path.basename(filepath)
@@ -179,13 +215,23 @@ def assess_posts() -> str:
         }
 
         db.collection("posts").document(doc_id).set(doc_data)
-        assessed_count += 1
+        assessed_records.append(doc_data)
 
-    return f"Assessed and saved {assessed_count} post(s) into Firestore collection 'posts'."
+    # Generate Markdown report table
+    report_rows = ["| ID | Title | Published Date | Content Strength | Score | Missing Tags | Word Count | Grammar Issues |", "|---|---|---|---|---|---|---|---|"]
+    for d in assessed_records:
+        g_issues = ", ".join(d["grammar_issues"]) if d["grammar_issues"] else "None"
+        report_rows.append(f"| `{d['id']}` | {d['title']} | {d['published_date']} | {d['content_strength']} | {d['score']} | {d['missing_tags']} | {d['word_count']} | {g_issues} |")
+
+    report_md = "## Assessed Posts in Firestore\n\n" + "\n".join(report_rows)
+    _write_tool_report("assess_posts", {}, report_md)
+
+    return f"Assessed and saved {len(assessed_records)} post(s) into Firestore collection 'posts'."
 
 
 def get_posts_by_tag(tag: str) -> str:
     """Queries Firestore collection 'posts' for posts with a specific topic tag.
+    Writes a report to reports/get_posts_by_tag.md.
 
     Args:
         tag: The tag to search for (e.g., 'Japanese', 'book', 'karate').
@@ -200,12 +246,21 @@ def get_posts_by_tag(tag: str) -> str:
         all_docs = [d.to_dict() for d in db.collection("posts").stream()]
         results = [d for d in all_docs if any(tag.lower() in t.lower() for t in d.get("tags", []))]
 
+    # Generate report
+    report_rows = ["| Title | Published Date | Score | Tags | URL |", "|---|---|---|---|---|"]
+    for r in results:
+        tags_str = ", ".join(r.get("tags", [])) or "None"
+        report_rows.append(f"| {r.get('title')} | {r.get('published_date')} | {r.get('score')} | {tags_str} | [{r.get('url')}]({r.get('url')}) |")
+
+    report_md = f"## Posts Matching Tag '{tag}' ({len(results)} found)\n\n" + "\n".join(report_rows)
+    _write_tool_report("get_posts_by_tag", {"tag": tag}, report_md)
+
     return json.dumps(results, indent=2)
 
 
 def get_weakest_posts() -> str:
     """Queries Firestore collection 'posts' for posts with weak content strength,
-    missing tags, or low scores.
+    missing tags, or low scores. Writes a report to reports/get_weakest_posts.md.
 
     Returns:
         JSON string list of weakest posts needing improvement.
@@ -219,11 +274,23 @@ def get_weakest_posts() -> str:
         or d.get("missing_tags") is True
         or d.get("score", 5) <= 3
     ]
+
+    # Generate report
+    report_rows = ["| Title | Published Date | Content Strength | Reason | Score | Missing Tags | URL |", "|---|---|---|---|---|---|---|"]
+    for w in weak_posts:
+        report_rows.append(
+            f"| {w.get('title')} | {w.get('published_date')} | {w.get('content_strength')} | {w.get('content_strength_reason')} | {w.get('score')} | {w.get('missing_tags')} | [{w.get('url')}]({w.get('url')}) |"
+        )
+
+    report_md = f"## Weakest Posts Identified ({len(weak_posts)} found)\n\n" + "\n".join(report_rows)
+    _write_tool_report("get_weakest_posts", {}, report_md)
+
     return json.dumps(weak_posts, indent=2)
 
 
 def get_recent_posts(limit: int = 10) -> str:
     """Queries Firestore collection 'posts' for recent posts sorted by published date.
+    Writes a report to reports/get_recent_posts.md.
 
     Args:
         limit: Maximum number of recent posts to retrieve (default 10).
@@ -243,6 +310,16 @@ def get_recent_posts(limit: int = 10) -> str:
         all_docs = [d.to_dict() for d in db.collection("posts").stream()]
         all_docs.sort(key=lambda x: x.get("published_date", ""), reverse=True)
         results = all_docs[:limit]
+
+    # Generate report
+    report_rows = ["| Published Date | Title | Score | Content Strength | Tags | URL |", "|---|---|---|---|---|---|"]
+    for r in results:
+        tags_str = ", ".join(r.get("tags", [])) or "None"
+        report_rows.append(f"| {r.get('published_date')} | {r.get('title')} | {r.get('score')} | {r.get('content_strength')} | {tags_str} | [{r.get('url')}]({r.get('url')}) |")
+
+    report_md = f"## Recent Posts (Limit: {limit})\n\n" + "\n".join(report_rows)
+    _write_tool_report("get_recent_posts", {"limit": limit}, report_md)
+
     return json.dumps(results, indent=2)
 
 
@@ -288,4 +365,5 @@ app = App(
     root_agent=root_agent,
     name="app",
 )
+
 
