@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog Curator Agent Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Marked.js for rendering markdown reports -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg-dark: #0b0f19;
+      --bg-card: rgba(18, 24, 38, 0.75);
+      --bg-card-border: rgba(255, 255, 255, 0.08);
+      --accent-purple: #7c3aed;
+      --accent-cyan: #06b6d4;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #ef4444;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 10% 10%, rgba(124, 58, 237, 0.15) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, rgba(6, 182, 212, 0.15) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--bg-card-border);
+    }
+
+    .logo-group h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.2rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #a78bfa, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-group p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 0.25rem;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--accent-emerald);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-emerald);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    /* Metrics Grid */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+    }
+
+    .metric-card.purple::before { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+    .metric-card.cyan::before { background: linear-gradient(90deg, #06b6d4, #38bdf8); }
+    .metric-card.emerald::before { background: linear-gradient(90deg, #10b981, #34d399); }
+    .metric-card.rose::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+    .metric-title {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .metric-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin: 0.5rem 0 0.25rem 0;
+      color: #fff;
+    }
+
+    .metric-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    /* Main Sections */
+    .grid-two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+
+    @media (max-width: 1024px) {
+      .grid-two-col { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--bg-card-border);
+      border-radius: 1.25rem;
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Action Buttons */
+    .actions-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--bg-card-border);
+      color: var(--text-main);
+      padding: 0.6rem 1.2rem;
+      border-radius: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn:hover {
+      background: rgba(124, 58, 237, 0.2);
+      border-color: var(--accent-purple);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-purple), #6d28d9);
+      border: none;
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+    }
+
+    /* Report Tabs */
+    .tab-nav {
+      display: flex;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.75rem;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--bg-card-border);
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.5rem 0.9rem;
+      border-radius: 0.4rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.05); }
+
+    .tab-btn.active {
+      color: #fff;
+      background: rgba(124, 58, 237, 0.25);
+      border: 1px solid rgba(124, 58, 237, 0.4);
+      font-weight: 600;
+    }
+
+    .report-content {
+      background: rgba(10, 15, 26, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      max-height: 480px;
+      overflow-y: auto;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    /* Markdown report styling inside viewer */
+    .report-content h1, .report-content h2, .report-content h3 {
+      font-family: 'Outfit', sans-serif;
+      margin-top: 1rem;
+      margin-bottom: 0.75rem;
+      color: #a78bfa;
+    }
+    .report-content h1 { font-size: 1.4rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 0.4rem; }
+    .report-content h2 { font-size: 1.2rem; }
+    .report-content p { margin-bottom: 0.75rem; color: #d1d5db; }
+
+    .report-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.85rem;
+    }
+
+    .report-content th, .report-content td {
+      padding: 0.6rem 0.8rem;
+      text-align: left;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .report-content th {
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+    }
+
+    /* Posts Table Section */
+    .posts-table-container {
+      overflow-x: auto;
+    }
+
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+
+    table.data-table th {
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.85rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--bg-card-border);
+    }
+
+    table.data-table td {
+      padding: 1rem;
+      border-bottom: 1px solid var(--bg-card-border);
+      font-size: 0.9rem;
+    }
+
+    table.data-table tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .pill-strong { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .pill-average { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .pill-weak { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .tag-badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.06);
+      color: #e5e7eb;
+      padding: 0.15rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      margin: 0.1rem;
+    }
+
+    .score-stars {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    .loader {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-group">
+        <h1>Blog Curator Agent</h1>
+        <p>Live Dashboard & Real-Time Tool Reports Output</p>
+      </div>
+      <div class="status-badge">
+        <span class="status-dot"></span> Agent & Firestore Active
+      </div>
+    </header>
+
+    <!-- Metrics Cards Grid -->
+    <section class="metrics-grid">
+      <div class="metric-card purple">
+        <div class="metric-title">Total Assessed Posts</div>
+        <div class="metric-value" id="m-total">--</div>
+        <div class="metric-sub">Fetched from ukidlucas.blogspot.com</div>
+      </div>
+      <div class="metric-card cyan">
+        <div class="metric-title">Average Score</div>
+        <div class="metric-value" id="m-avg-score">--</div>
+        <div class="metric-sub">Out of 5.0 rating scale</div>
+      </div>
+      <div class="metric-card emerald">
+        <div class="metric-title">Strong Content</div>
+        <div class="metric-value" id="m-strong">--</div>
+        <div class="metric-sub">High quality & fully tagged</div>
+      </div>
+      <div class="metric-card rose">
+        <div class="metric-title">Weak / Needing Improvement</div>
+        <div class="metric-value" id="m-weak">--</div>
+        <div class="metric-sub" id="m-missing-tags">-- missing tags</div>
+      </div>
+    </section>
+
+    <!-- Two Column Section: Action Bar & Live Report Viewer -->
+    <section class="grid-two-col">
+      <!-- Panel 1: On-Demand Tool Execution -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Run Agent Tools</div>
+        </div>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.25rem;">
+          Trigger tools on demand. Each tool executes and instantly updates its Markdown report in <code style="color: #a78bfa;">reports/</code>.
+        </p>
+        <div class="actions-bar">
+          <button class="btn btn-primary" onclick="runTool('summarize_posts')">
+            ✨ Run summarize_posts
+          </button>
+          <button class="btn" onclick="runTool('get_posts_by_score', 'best')">
+            🏆 get_posts_by_score (best)
+          </button>
+          <button class="btn" onclick="runTool('get_posts_by_score', 'worst')">
+            ⚠️ get_posts_by_score (worst)
+          </button>
+          <button class="btn" onclick="runTool('get_recent_posts', '10')">
+            📅 get_recent_posts (10)
+          </button>
+          <button class="btn" onclick="runTool('assess_posts')">
+            🔍 assess_posts
+          </button>
+        </div>
+        <div id="tool-status" style="margin-top: 1rem; font-size: 0.85rem; color: var(--accent-cyan); display: none;"></div>
+      </div>
+
+      <!-- Panel 2: Live Tool Report Viewer -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">Live Tool Reports (<code style="color: #a78bfa; font-size: 1rem;">reports/*.md</code>)</div>
+        </div>
+        <div class="tab-nav" id="report-tabs">
+          <!-- Dynamically populated report tabs -->
+        </div>
+        <div class="report-content" id="report-viewer">
+          <p style="color: var(--text-muted);">Loading tool reports...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Posts Table Panel -->
+    <section class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Assessed Posts Collection (Firestore)</div>
+        <button class="btn" onclick="fetchPosts()"><span id="refresh-icon">🔄</span> Refresh Posts</button>
+      </div>
+      <div class="posts-table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Date</th>
+              <th>Score</th>
+              <th>Strength</th>
+              <th>Tags</th>
+              <th>Grammar / Notes</th>
+            </tr>
+          </thead>
+          <tbody id="posts-body">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted);">Loading posts from Firestore...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    let reportsData = [];
+
+    async function loadMetrics() {
+      try {
+        const res = await fetch('/api/metrics');
+        const data = await res.json();
+        document.getElementById('m-total').textContent = data.total_posts;
+        document.getElementById('m-avg-score').textContent = data.average_score + ' / 5.0';
+        document.getElementById('m-strong').textContent = data.strong_count;
+        document.getElementById('m-weak').textContent = data.weak_count;
+        document.getElementById('m-missing-tags').textContent = data.missing_tags_count + ' missing tags';
+      } catch (err) {
+        console.error('Failed to load metrics:', err);
+      }
+    }
+
+    async function loadReports(selectReportName = null) {
+      try {
+        const res = await fetch('/api/reports');
+        const data = await res.json();
+        reportsData = data.reports || [];
+
+        const tabNav = document.getElementById('report-tabs');
+        tabNav.innerHTML = '';
+
+        if (reportsData.length === 0) {
+          document.getElementById('report-viewer').innerHTML = '<p style="color: var(--text-muted);">No reports generated yet.</p>';
+          return;
+        }
+
+        let activeIndex = 0;
+
+        reportsData.forEach((rep, idx) => {
+          const btn = document.createElement('button');
+          btn.className = 'tab-btn';
+          btn.textContent = rep.name + '.md';
+          
+          if (selectReportName && rep.name === selectReportName) {
+            activeIndex = idx;
+          }
+
+          btn.onclick = () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderReportContent(rep.content);
+          };
+          tabNav.appendChild(btn);
+        });
+
+        // Activate selected or first tab
+        const buttons = tabNav.querySelectorAll('.tab-btn');
+        if (buttons[activeIndex]) {
+          buttons[activeIndex].classList.add('active');
+          renderReportContent(reportsData[activeIndex].content);
+        }
+      } catch (err) {
+        console.error('Failed to load reports:', err);
+      }
+    }
+
+    function renderReportContent(markdownText) {
+      const viewer = document.getElementById('report-viewer');
+      if (typeof marked !== 'undefined') {
+        viewer.innerHTML = marked.parse(markdownText);
+      } else {
+        viewer.textContent = markdownText;
+      }
+    }
+
+    async function fetchPosts() {
+      try {
+        const res = await fetch('/api/posts');
+        const data = await res.json();
+        const posts = data.posts || [];
+
+        const tbody = document.getElementById('posts-body');
+        tbody.innerHTML = '';
+
+        if (posts.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No posts found.</td></tr>';
+          return;
+        }
+
+        posts.forEach(p => {
+          const tr = document.createElement('tr');
+          
+          const strength = p.content_strength || 'average';
+          const pillClass = strength === 'strong' ? 'pill-strong' : (strength === 'weak' ? 'pill-weak' : 'pill-average');
+
+          const tags = (p.tags && p.tags.length > 0) 
+            ? p.tags.map(t => `<span class="tag-badge">${t}</span>`).join('') 
+            : '<span style="color: var(--accent-rose); font-size: 0.8rem;">⚠️ No tags</span>';
+
+          const score = p.score || 3;
+          const stars = '★'.repeat(score) + '☆'.repeat(5 - score);
+
+          const reason = p.content_strength_reason || '';
+
+          tr.innerHTML = `
+            <td><a href="${p.url}" target="_blank" style="color: #a78bfa; text-decoration: none; font-weight: 600;">${p.title}</a></td>
+            <td style="color: var(--text-muted); font-size: 0.85rem;">${p.published_date || ''}</td>
+            <td><span class="score-stars">${stars}</span> (${score})</td>
+            <td><span class="pill ${pillClass}">${strength}</span></td>
+            <td>${tags}</td>
+            <td style="color: var(--text-muted); font-size: 0.85rem;">${reason}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('Failed to load posts:', err);
+      }
+    }
+
+    async function runTool(toolName, param = null) {
+      const statusDiv = document.getElementById('tool-status');
+      statusDiv.style.display = 'block';
+      statusDiv.innerHTML = `<span class="loader"></span> Running tool <strong>${toolName}</strong>...`;
+
+      try {
+        let url = `/api/run-tool?tool_name=${encodeURIComponent(toolName)}`;
+        if (param) url += `&param=${encodeURIComponent(param)}`;
+
+        const res = await fetch(url, { method: 'POST' });
+        const data = await res.json();
+
+        statusDiv.style.color = 'var(--accent-emerald)';
+        statusDiv.innerHTML = `✅ Tool <strong>${toolName}</strong> executed successfully! Report updated.`;
+
+        // Reload data
+        await loadMetrics();
+        await loadReports(toolName);
+        await fetchPosts();
+
+        setTimeout(() => { statusDiv.style.display = 'none'; }, 4000);
+      } catch (err) {
+        statusDiv.style.color = 'var(--accent-rose)';
+        statusDiv.innerHTML = `❌ Error running tool ${toolName}: ${err.message}`;
+      }
+    }
+
+    // Initial load
+    loadMetrics();
+    loadReports();
+    fetchPosts();
+  </script>
+</body>
+</html>
