@@ -121,6 +121,12 @@
 - **Why**: Provide collection-wide metrics, quality score averages, strength breakdown, and top tags.
 - **Verification**: Executed `summarize_posts()` and verified `reports/summarize_posts.md`.
 
+### 2026-08-20 22:27 - Updated summarize_posts to Prose Format
+- **What was built/changed**: Updated `summarize_posts()` in `app/agent.py` to produce a pure narrative prose summary (under 100 words, no tables) in `reports/summarize_posts.md`.
+- **Why**: User requested narrative prose summary instead of markdown tables.
+- **Verification**: Executed `summarize_posts()` and verified `reports/summarize_posts.md`.
+
+
 
 
 

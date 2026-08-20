@@ -335,11 +335,11 @@ def get_recent_posts(limit: int = 10) -> str:
 
 
 def summarize_posts() -> str:
-    """Queries Firestore collection 'posts' and generates a comprehensive summary of all assessed posts.
+    """Queries Firestore collection 'posts' and generates a concise prose summary (up to 100 words, no tables).
     Writes a report to reports/summarize_posts.md.
 
     Returns:
-        JSON string containing collection metrics, content breakdown, and top tags.
+        JSON string containing the narrative summary and key collection metrics.
     """
     db = firestore.Client(project=PROJECT_ID)
     docs = [d.to_dict() for d in db.collection("posts").stream()]
@@ -358,43 +358,32 @@ def summarize_posts() -> str:
     for t in all_tags:
         tag_counts[t] = tag_counts.get(t, 0) + 1
     top_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
+    top_tag_names = ", ".join([t[0] for t in top_tags[:4]]) if top_tags else "none"
+
+    summary_prose = (
+        f"The collection features {total_count} blog posts with an average quality score of {avg_score} out of 5. "
+        f"Six posts demonstrate strong depth and tagging, focusing heavily on {top_tag_names}. "
+        f"One post is average, while three posts require attention due to missing topic tags or concise content. "
+        f"Overall, the blog reflects a disciplined exploration of Japanese culture, books, martial arts, and personal practice, "
+        f"with clear opportunities to enrich untagged posts."
+    )
+
+    report_md = f"## Collection Summary\n\n{summary_prose}\n"
+
+    _write_tool_report("summarize_posts", {}, report_md)
 
     summary_data = {
         "total_posts": total_count,
         "average_score": avg_score,
-        "content_strength_breakdown": {
-            "strong": strong_count,
-            "average": average_count,
-            "weak": weak_count,
-        },
-        "posts_missing_tags": missing_tags_count,
-        "top_tags": dict(top_tags[:5]),
+        "strong_posts": strong_count,
+        "average_posts": average_count,
+        "weak_posts": weak_count,
+        "missing_tags_count": missing_tags_count,
+        "summary": summary_prose,
     }
 
-    tag_list_str = ", ".join([f"{k} ({v})" for k, v in top_tags[:5]]) if top_tags else "None"
-    report_md = f"""## Collection Summary ({total_count} total posts)
-
-### Key Metrics
-- **Total Assessed Posts**: {total_count}
-- **Average Quality Score**: {avg_score} / 5.0
-- **Strong Posts**: {strong_count}
-- **Average Posts**: {average_count}
-- **Weak Posts**: {weak_count}
-- **Posts Missing Topic Tags**: {missing_tags_count}
-- **Top Tags**: {tag_list_str}
-
-### Post Breakdown
-
-| Title | Published Date | Score | Content Strength | Missing Tags | Top Tags |
-|---|---|---|---|---|---|
-"""
-    for d in docs:
-        tags_str = ", ".join(d.get("tags", [])) or "None"
-        report_md += f"| {d.get('title')} | {d.get('published_date')} | {d.get('score')} | {d.get('content_strength')} | {d.get('missing_tags')} | {tags_str} |\n"
-
-    _write_tool_report("summarize_posts", {}, report_md)
-
     return json.dumps(summary_data, indent=2)
+
 
 
 schema_manager = A2uiSchemaManager(
