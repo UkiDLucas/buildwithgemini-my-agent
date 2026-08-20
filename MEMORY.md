@@ -6,13 +6,16 @@
 - **GCP Project ID**: `qwiklabs-gcp-03-001b5a0cda08`
 - **GCP Region**: `us-central1`
 - **Firestore Database**: `(default)` in `us-central1`, collection `"posts"`
+- **Active Endpoints**:
+  - **Dev UI / ADK Playground**: `http://127.0.0.1:8080/dev-ui/?app=app`
+  - **Live Web Dashboard**: `http://127.0.0.1:8085`
 - **Tools**:
-  - `fetch_posts()`: HTTP GET `https://ukidlucas.blogspot.com/feeds/posts/default?max-results=10`, parses Atom XML, writes `posts/YYYY-MM-DD-slug.md` (skips existing).
-  - `assess_posts()`: Reads `posts/*.md`, computes word count, missing tags flag, grammar issues, content strength, and score, writes documents to Firestore collection `"posts"`.
-  - `get_posts_by_tag(tag)`: Queries Firestore `posts` collection by tag (`array_contains` filter).
-  - `get_posts_by_score(order="best"|"worst", limit=10)`: Queries Firestore `posts` collection sorted by score (best or worst). Replaces separate weakest posts tool.
-  - `get_recent_posts(limit=10)`: Queries Firestore `posts` collection ordered by `published_date` descending.
-  - `summarize_posts()`: Queries Firestore `posts` collection and generates collection metrics, strength breakdown, and top tags report in `reports/summarize_posts.md`.
+  - `fetch_posts()`: HTTP GET `https://ukidlucas.blogspot.com/feeds/posts/default?max-results=10`, parses Atom XML, writes `posts/YYYY-MM-DD-slug.md` (skips existing). Writes `reports/fetch_posts.md`.
+  - `assess_posts()`: Reads `posts/*.md`, computes word count, missing tags flag, grammar issues, content strength, and score (1-5), writes documents to Firestore collection `"posts"`. Writes `reports/assess_posts.md`.
+  - `get_posts_by_tag(tag)`: Queries Firestore `posts` collection by tag (`array_contains` filter). Writes `reports/get_posts_by_tag.md`.
+  - `get_posts_by_score(order="best"|"worst", limit=10)`: Queries Firestore `posts` collection sorted by score (best or worst). Replaces separate weakest posts tool. Writes `reports/get_posts_by_score.md`.
+  - `get_recent_posts(limit=10)`: Queries Firestore `posts` collection ordered by `published_date` descending. Writes `reports/get_recent_posts.md`.
+  - `summarize_posts()`: Queries Firestore `posts` collection and generates collection metrics, strength breakdown, and top tags narrative summary in `reports/summarize_posts.md`.
 - **Data Schema (`posts` Firestore Collection)**:
   - `id` (string): post filename stem (e.g., `2026-08-11-overnight-pizza-sourdough-12-inch`)
   - `title` (string): post title
@@ -31,6 +34,7 @@
   - `google-cloud-firestore>=2.28.1`
   - `a2ui-agent-sdk>=0.2.4` (Imported as `a2ui`)
   - `google-genai`
+  - `fastapi`, `uvicorn`, `marked` (for dashboard server and UI rendering)
 - **Gotchas & Critical Constraints**:
   - **A2UI Schema Version**: MUST be version `0.8`. `a2ui_callback` in `a2ui_utils.py` keys off v0.8 messages (`beginRendering`, `surfaceUpdate`). v0.9 will not render.
   - **Playground Token Streaming**: Token Streaming MUST be turned OFF in `adk web` / Dev UI (gear icon). With streaming on, `adk web` displays raw JSON and does not render A2UI surfaces.
@@ -38,27 +42,66 @@
   - **Firestore Database Initialization**: The default Firestore database must exist in `us-central1` (created via `gcloud firestore databases create --location=us-central1`).
   - **Python Execution**: Use `uv run agents-cli` or `uv run python` so the project `.venv` is used rather than system Python.
 
-### How to Run From a Fresh Clone
+---
 
-1. Clone repository:
+## Detailed Project Architectural Summary
+
+### 1. High-Level Objective
+The **Blog Curator Agent** is an autonomous AI agent built on the Google Agent Development Kit (ADK) that continuously fetches, archives, evaluates, queries, and reports on blog post content from `ukidlucas.blogspot.com`. It provides dual-mode output: 50-word conversational digests in the chat, structured A2UI card/table components in the ADK Playground, persistent Markdown reports on disk, and a standalone live web dashboard.
+
+### 2. Core Subsystems & Components
+
+```
+┌─────────────────────────┐      ┌─────────────────────────┐      ┌─────────────────────────┐
+│ Atom XML Feed           │ ───> │ Local Markdown Archives │ ───> │ Qualitative Assessment  │
+│ (ukidlucas.blogspot.com)│      │ (posts/*.md)            │      │ (Gemini 2.5 Flash)      │
+└─────────────────────────┘      └─────────────────────────┘      └──────────┬──────────────┘
+                                                                             │
+                                                                             ▼
+┌─────────────────────────┐      ┌─────────────────────────┐      ┌─────────────────────────┐
+│ Live Web Dashboard      │ <─── │ Disk Side-Effect Reports│ <─── │ GCP Firestore DB        │
+│ (http://127.0.0.1:8085) │      │ (reports/*.md)          │      │ (posts collection)      │
+└─────────────────────────┘      └─────────────────────────┘      └─────────────────────────┘
+```
+
+- **Data Ingestion (`fetch_posts`)**: Fetches Atom XML via HTTP GET, parses entries, strips HTML tags, and saves raw posts as local Markdown files in `posts/`.
+- **Qualitative Assessment (`assess_posts`)**: Evaluates post body length, grammar offenses, missing tags, content strength (`strong`, `average`, `weak`), and score (1 to 5). Writes rich structured records into Firestore collection `"posts"`.
+- **Query & Analytics Tools**:
+  - `get_posts_by_tag`: Filters posts by topic tag.
+  - `get_posts_by_score`: Parameterized best/worst ordering.
+  - `get_recent_posts`: Sorts by publication date.
+  - `summarize_posts`: Produces a <100 word narrative collection summary.
+- **Side-Effect Audit Reports (`_write_tool_report`)**: Every tool writes a standalone Markdown report file in `reports/` prefixed with system clock timestamp and parameter list.
+- **A2UI v0.8 Callback (`app/a2ui_utils.py`)**: Intercepts model responses to build tiny, flat surface cards/tables for `adk web` while preserving non-A2UI prose so 50-word chat digests render cleanly.
+- **Live Web Dashboard (`app/dashboard_server.py` & `dashboard/index.html`)**: FastAPI server providing `/api/metrics`, `/api/reports`, `/api/posts`, and `/api/run-tool` alongside a glassmorphism UI.
+
+### 3. How to Run From a Fresh Clone
+
+1. **Clone repository**:
    ```bash
    git clone https://github.com/UkiDLucas/buildwithgemini-my-agent.git
    cd buildwithgemini-my-agent
    ```
-2. Sync dependencies:
+2. **Install dependencies**:
    ```bash
    agents-cli install   # or uv sync
    ```
-3. Run CLI queries:
+3. **Run CLI commands**:
    ```bash
    uv run agents-cli run "fetch new posts and assess them"
-   uv run agents-cli run "list my recent posts"
+   uv run agents-cli run "summarize posts"
    ```
-4. Run Playground (Dev UI):
+4. **Launch ADK Playground (Port 8080)**:
    ```bash
    agents-cli playground --port 8080 --host 0.0.0.0
    ```
-   Open `http://127.0.0.1:8080/dev-ui/?app=app` in Chrome, turn **Token Streaming OFF**, and query the agent.
+   *Note: Open `http://127.0.0.1:8080/dev-ui/?app=app` and turn **Token Streaming OFF**.*
+
+5. **Launch Live Web Dashboard (Port 8085)**:
+   ```bash
+   uv run uvicorn app.dashboard_server:app --host 0.0.0.0 --port 8085
+   ```
+   *Open `http://127.0.0.1:8085` to view metric cards, live report tabs, and on-demand tool controls.*
 
 ---
 
@@ -150,9 +193,6 @@
 - **Why**: Fulfill user request for a webpage providing live summaries and tool returns.
 - **Verification**: Tested API endpoints and opened web dashboard at `http://127.0.0.1:8085`.
 
-
-
-
-
-
-
+### 2026-08-20 22:58 - Comprehensive Detailed Project Summary
+- **What was built/changed**: Updated `MEMORY.md` with complete architectural documentation, data flow diagram, subsystem breakdown, setup & execution instructions, active endpoints, and detailed project milestone history.
+- **Why**: Provide a complete, self-contained reference document for the entire project.
