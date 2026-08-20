@@ -10,7 +10,7 @@
   - `fetch_posts()`: HTTP GET `https://ukidlucas.blogspot.com/feeds/posts/default?max-results=10`, parses Atom XML, writes `posts/YYYY-MM-DD-slug.md` (skips existing).
   - `assess_posts()`: Reads `posts/*.md`, computes word count, missing tags flag, grammar issues, content strength, and score, writes documents to Firestore collection `"posts"`.
   - `get_posts_by_tag(tag)`: Queries Firestore `posts` collection by tag (`array_contains` filter).
-  - `get_weakest_posts()`: Queries Firestore `posts` collection for weak content, low score (<=3), or missing tags.
+  - `get_posts_by_score(order="best"|"worst", limit=10)`: Queries Firestore `posts` collection sorted by score (best or worst). Replaces separate weakest posts tool.
   - `get_recent_posts(limit=10)`: Queries Firestore `posts` collection ordered by `published_date` descending.
 - **Data Schema (`posts` Firestore Collection)**:
   - `id` (string): post filename stem (e.g., `2026-08-11-overnight-pizza-sourdough-12-inch`)
@@ -107,5 +107,13 @@
 ### 2026-08-20 22:06 - Updated System Instruction to 50-Word Conversational Digest
 - **What was built/changed**: Updated agent system instruction in `app/agent.py` requiring all chat responses after tool calls to be a max 50-word conversational summary digest (counts, standouts, and one suggested next action).
 - **Why**: Provide human-skimmable chat responses while preserving complete details in `reports/*.md`.
+
+### 2026-08-20 22:17 - Added get_posts_by_score Tool & Fixed Blank Chat Responses
+- **What was built/changed**:
+  - Replaced `get_weakest_posts()` with `get_posts_by_score(order="best"|"worst", limit=10)` in `app/agent.py`. Updated reports generation (`reports/get_posts_by_score.md`).
+  - Updated `a2ui_callback` in `app/a2ui_utils.py` to extract and preserve non-A2UI prose parts alongside A2UI blob payloads so the 50-word chat summary digest renders cleanly without producing blank responses.
+- **Why**: Unified scoring queries into a single parameterized tool and fixed A2UI callback stripping text prose from model outputs.
+- **Verification**: Executed `get_posts_by_score` for both `"best"` and `"worst"` orders, verified `reports/get_posts_by_score.md`.
+
 
 

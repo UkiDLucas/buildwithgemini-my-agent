@@ -221,39 +221,54 @@ def a2ui_callback(
     callback_context: CallbackContext,
     llm_response: LlmResponse,
 ) -> LlmResponse | None:
-    """Convert A2UI JSON in text output to rendered components (or a clean fallback)."""
+    """Convert A2UI JSON in text output to rendered components (or a clean fallback), while preserving prose text parts."""
     if not llm_response.content or not llm_response.content.parts:
         return None
+
+    has_a2ui = False
+    new_parts = []
 
     for part in llm_response.content.parts:
         text = (part.text or "").strip()
         if not text:
+            if part.inline_data or part.function_call or part.function_response:
+                new_parts.append(part)
             continue
-        # Cheap gate: only touch parts that look like A2UI, leave prose alone.
+
         if not any(k in text for k in _A2UI_KEYS):
+            new_parts.append(part)
             continue
 
         messages = _extract_a2ui_messages(text)
         if not messages:
+            new_parts.append(part)
             continue
 
-        # Turn un-fetchable <Image> URLs into a text note (no broken-image icons).
         _sanitize_image_components(messages)
 
         if not _surface_is_renderable(messages):
-            # We recognized A2UI but couldn't recover a renderable surface — the
-            # model emitted invalid JSON, a missing surface body, or an undefined
-            # root/child reference. Return clean text instead of a blank card.
-            return LlmResponse(
-                content=types.Content(
-                    role="model", parts=[types.Part(text=_FALLBACK_TEXT)]
-                )
-            )
+            new_parts.append(types.Part(text=_FALLBACK_TEXT))
+            continue
 
-        new_parts = [_wrap_a2ui_part(m) for m in messages]
-        return LlmResponse(
-            content=types.Content(role="model", parts=new_parts),
-            custom_metadata={"a2a:response": "true"},
-        )
+        has_a2ui = True
 
-    return None
+        # Extract non-A2UI prose text if present
+        clean_prose = _TAG_RE.sub("", text)
+        clean_prose = re.sub(r"```(?:json)?[\s\S]*?```", "", clean_prose)
+        clean_prose = re.sub(r"\{[\s\S]*?\"(?:beginRendering|surfaceUpdate|dataModelUpdate)\"[\s\S]*?\}", "", clean_prose)
+        clean_prose = clean_prose.strip()
+
+        if clean_prose:
+            new_parts.append(types.Part(text=clean_prose))
+
+        for m in messages:
+            new_parts.append(_wrap_a2ui_part(m))
+
+    if not has_a2ui:
+        return None
+
+    return LlmResponse(
+        content=types.Content(role="model", parts=new_parts),
+        custom_metadata={"a2a:response": "true"},
+    )
+

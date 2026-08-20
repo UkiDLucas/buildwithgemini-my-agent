@@ -258,34 +258,45 @@ def get_posts_by_tag(tag: str) -> str:
     return json.dumps(results, indent=2)
 
 
-def get_weakest_posts() -> str:
-    """Queries Firestore collection 'posts' for posts with weak content strength,
-    missing tags, or low scores. Writes a report to reports/get_weakest_posts.md.
+def get_posts_by_score(order: str = "best", limit: int = 10) -> str:
+    """Queries Firestore collection 'posts' for posts ordered by score (best or worst).
+    Writes a report to reports/get_posts_by_score.md.
+
+    Args:
+        order: Sort order, either 'best' (highest score first) or 'worst' (lowest score first). Default is 'best'.
+        limit: Maximum number of posts to retrieve (default 10).
 
     Returns:
-        JSON string list of weakest posts needing improvement.
+        JSON string list of matching posts sorted by score.
     """
     db = firestore.Client(project=PROJECT_ID)
     all_docs = [d.to_dict() for d in db.collection("posts").stream()]
-    weak_posts = [
-        d
-        for d in all_docs
-        if d.get("content_strength") == "weak"
-        or d.get("missing_tags") is True
-        or d.get("score", 5) <= 3
-    ]
 
-    # Generate report
-    report_rows = ["| Title | Published Date | Content Strength | Reason | Score | Missing Tags | URL |", "|---|---|---|---|---|---|---|"]
-    for w in weak_posts:
+    order_clean = order.lower().strip() if isinstance(order, str) else "best"
+
+    if order_clean == "worst":
+        # Sort by score ascending (lowest score first), then published_date ascending
+        all_docs.sort(key=lambda x: (x.get("score", 5), x.get("published_date", "")))
+    else:
+        # 'best' -> sort by score descending (highest score first), then published_date descending
+        all_docs.sort(key=lambda x: (x.get("score", 0), x.get("published_date", "")), reverse=True)
+
+    results = all_docs[:limit]
+
+    # Generate Markdown report
+    report_rows = [
+        "| Title | Published Date | Score | Content Strength | Missing Tags | Reason | URL |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for p in results:
         report_rows.append(
-            f"| {w.get('title')} | {w.get('published_date')} | {w.get('content_strength')} | {w.get('content_strength_reason')} | {w.get('score')} | {w.get('missing_tags')} | [{w.get('url')}]({w.get('url')}) |"
+            f"| {p.get('title')} | {p.get('published_date')} | {p.get('score')} | {p.get('content_strength')} | {p.get('missing_tags')} | {p.get('content_strength_reason')} | [{p.get('url')}]({p.get('url')}) |"
         )
 
-    report_md = f"## Weakest Posts Identified ({len(weak_posts)} found)\n\n" + "\n".join(report_rows)
-    _write_tool_report("get_weakest_posts", {}, report_md)
+    report_md = f"## Posts Ordered by Score ({order_clean.upper()}, Limit: {limit})\n\n" + "\n".join(report_rows)
+    _write_tool_report("get_posts_by_score", {"order": order, "limit": limit}, report_md)
 
-    return json.dumps(weak_posts, indent=2)
+    return json.dumps(results, indent=2)
 
 
 def get_recent_posts(limit: int = 10) -> str:
@@ -331,10 +342,10 @@ schema_manager = A2uiSchemaManager(
 instruction = schema_manager.generate_system_prompt(
     role_description="You are a Blog Curator Agent. You fetch, assess, and manage blog posts from ukidlucas.blogspot.com stored in Firestore.",
     workflow_description=(
-        "Use your tools (fetch_posts, assess_posts, get_posts_by_tag, get_weakest_posts, get_recent_posts) to fulfill user requests. "
-        "IMPORTANT RESPONSE RULE: After every tool call, reply in the chat with a conversational summary digest of the result. "
-        "Keep the chat reply to a MAXIMUM OF 50 WORDS, specifically worded for a human skimming: include counts, standouts, and one suggested next action. "
-        "The full detail is saved to disk in the reports/ Markdown file; the chat receives only this 50-word digest."
+        "Use your tools (fetch_posts, assess_posts, get_posts_by_tag, get_posts_by_score, get_recent_posts) to fulfill user requests. "
+        "IMPORTANT CHAT RESPONSE RULE: After every tool call, ALWAYS reply in the chat with a conversational summary digest of the result. "
+        "Keep the chat text digest to a MAXIMUM OF 50 WORDS, specifically formatted for a human skimming: include key counts, standouts, and one suggested next action. "
+        "The full detailed table or list is automatically written to disk in the reports/ Markdown file; the chat gets only this 50-word digest."
     ),
     ui_description=(
         "Keep every surface tiny and flat: ONE Card > ONE Column > a few Text rows or Row components. "
@@ -358,7 +369,7 @@ root_agent = Agent(
         retry_options=types.HttpRetryOptions(attempts=3),
     ),
     instruction=instruction,
-    tools=[fetch_posts, assess_posts, get_posts_by_tag, get_weakest_posts, get_recent_posts],
+    tools=[fetch_posts, assess_posts, get_posts_by_tag, get_posts_by_score, get_recent_posts],
     after_model_callback=a2ui_callback,
 )
 
@@ -366,6 +377,7 @@ app = App(
     root_agent=root_agent,
     name="app",
 )
+
 
 
 
